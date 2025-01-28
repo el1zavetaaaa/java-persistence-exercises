@@ -1,12 +1,10 @@
 package com.bobocode;
 
 import com.bobocode.exception.QueryHelperException;
-import com.bobocode.util.ExerciseNotCompletedException;
-import org.hibernate.Session;
-
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
-import java.util.Collection;
+import org.hibernate.Session;
+
 import java.util.function.Function;
 
 /**
@@ -32,6 +30,20 @@ public class QueryHelper {
      * @return query result specified by type T
      */
     public <T> T readWithinTx(Function<EntityManager, T> entityManagerConsumer) {
-        throw new ExerciseNotCompletedException(); // todo:
+        final EntityManager entityManager = entityManagerFactory.createEntityManager();
+        entityManager.getTransaction().begin();
+        entityManager.unwrap(Session.class).setDefaultReadOnly(true);
+
+        try {
+            T result = entityManagerConsumer.apply(entityManager);
+            entityManager.getTransaction().commit();
+            return result;
+        } catch (Exception e) {
+            entityManager.getTransaction().rollback();
+            throw new QueryHelperException("Error performing query. Transaction is rolled back", e.getCause());
+        } finally {
+            entityManager.close();
+        }
     }
+
 }

@@ -19,6 +19,7 @@ import java.util.Map;
 public class Session {
     private DataSource dataSource;
     private static String SQL_SELECT = "select * from %s where id = ?";
+    private static String SQL_UPDATE = "update %s set %s where id = ?";
     final Map<com.bobocode.orm.utils.EntityKey<?>, Object> cache = new HashMap<>();
     final Map<EntityKey<?>, List<Object>> snapshotCopies = new HashMap<>();
 
@@ -37,7 +38,7 @@ public class Session {
         T entity = type.getDeclaredConstructor().newInstance();
 
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(getSelectQuery(type))) {
+             PreparedStatement preparedStatement = connection.prepareStatement(String.format(SQL_SELECT, getTableName(type)))) {
 
             preparedStatement.setObject(1, id);
             System.out.printf("Executing query: %s%n", preparedStatement);
@@ -51,7 +52,7 @@ public class Session {
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Error executing query", e);
+            throw new RuntimeException("Error executing select query", e);
         }
 
         return null;
@@ -73,19 +74,8 @@ public class Session {
         }
     }
 
-    private String getSelectQuery(Class<?> classType) {
-        var annotation = classType.getAnnotation(Table.class);
-        final String tableName = annotation.name();
-        return String.format(SQL_SELECT, tableName);
-    }
-
-    public <T> void close(){
-        //todo: add logic, which will update entities that changed at the end of the session
-
-    }
-
     @SneakyThrows
-    private void compareFields(){
+    public <T> void close(){
         for (Map.Entry<EntityKey<?>, List<Object>> currentSnapShot: snapshotCopies.entrySet()){
             EntityKey<?> currentKey = currentSnapShot.getKey();
 
@@ -100,9 +90,49 @@ public class Session {
             }
 
             if(!currentSnapShot.getValue().equals(currentEntityValues)){
-                System.out.println("here");
-                //todo: add update method
+                updateEntity(currentEntity);
             }
         }
+    }
+
+    @SneakyThrows
+    private <T> void updateEntity(T entity){
+        final List<String> setClause = new ArrayList<>();
+        final List<Object> params = new ArrayList<>();
+        Object idVal = 0L;
+        for (Field field: entity.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            var column = field.getAnnotation(Column.class);
+            if(column != null){
+                if(column.name().equals("id")){
+                    idVal = field.get(entity);
+                } else {
+                    setClause.add(column.name() + "= ?");
+                    params.add(field.get(entity));
+                }
+            }
+        }
+
+        String setClauseJoin = String.join(",", setClause);
+        params.add(idVal);
+
+        try (Connection connection = dataSource.getConnection();
+             var preparedStatement = connection.prepareStatement(
+                    String.format(SQL_UPDATE, getTableName(entity.getClass()), setClauseJoin)))
+        {
+            for (int i = 0; i < params.size(); i++) {
+                preparedStatement.setObject(i+1, params.get(i));
+            }
+            System.out.printf("Executing query: %s%n", preparedStatement);
+            preparedStatement.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Error executing update query", e);
+        }
+    }
+
+    private String getTableName(Class<?> classType) {
+        var annotation = classType.getAnnotation(Table.class);
+        return annotation.name();
     }
 }

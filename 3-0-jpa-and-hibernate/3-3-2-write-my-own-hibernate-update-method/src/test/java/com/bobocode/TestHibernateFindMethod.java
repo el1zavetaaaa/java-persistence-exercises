@@ -7,9 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
 
 import javax.sql.DataSource;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestHibernateFindMethod {
 
@@ -37,13 +38,43 @@ public class TestHibernateFindMethod {
     }
 
     @Test
-    public void updateMethod(){
+    public void testUpdateMethodWhenTheFieldsAreChanged() {
+        ByteArrayOutputStream outContent = setUpByteArrayOutputStream();
         var mySession = createSession();
 
         var movie = mySession.find(Movie.class, 1L);
-        movie.setName("CHANGE");
+        movie.setName("UPDATED");
 
         mySession.close();
+
+        String printedOutput = outContent.toString();
+        assertAll(
+                () -> assertTrue(printedOutput.contains("select")),
+                () -> assertTrue(printedOutput.contains("update"))
+        );
+    }
+
+    @Test
+    public void testUpdateMethodWhenTheFieldsAreNOTChanged() {
+        ByteArrayOutputStream outContent = setUpByteArrayOutputStream();
+        var mySession = createSession();
+
+        var movie = mySession.find(Movie.class, 1L);
+
+        mySession.close();
+
+
+        String printedOutput = outContent.toString();
+        assertAll(
+                () -> assertTrue(printedOutput.contains("select")),
+                () -> assertFalse(printedOutput.contains("update"))
+        );
+    }
+
+    private ByteArrayOutputStream setUpByteArrayOutputStream() {
+        ByteArrayOutputStream outContent = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outContent));
+        return outContent;
     }
 
     private Session createSession() {

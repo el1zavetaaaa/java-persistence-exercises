@@ -1,10 +1,7 @@
 package com.bobocode.model;
 
 import jakarta.persistence.*;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 /**
  * todo:
@@ -23,6 +20,7 @@ import lombok.Setter;
 @EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "product")
+@ToString
 public class Product {
 
     @Id
